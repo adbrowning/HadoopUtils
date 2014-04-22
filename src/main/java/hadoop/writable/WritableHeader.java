@@ -22,7 +22,7 @@ import java.io.IOException;
 
 /**
  *
- * @author adam
+ * Common header for off-heap writable formats
  */
 public class WritableHeader {
     private long length;

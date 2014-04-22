@@ -27,7 +27,10 @@ import java.util.List;
 import org.apache.hadoop.io.Writable;
 
 /**
- *
+ * Implementation of Writable that stores its data off the JVM's heap. The class 
+ * can be used as an output stream to act as a sink for data of unknown size that
+ * needs to be held together. It also supports acquiring an InputStream to retrieve
+ * the information without having to hold it all in the JVM's heap.
  * @author adam
  */
 public class OffHeapWritable extends OutputStream implements Writable  {
@@ -36,10 +39,19 @@ public class OffHeapWritable extends OutputStream implements Writable  {
     private final List<ByteBuffer> buffers = new ArrayList<>();
     private final int maxNumBlocks;
     private final int blockSize;
-    private final byte[] copyBuffer = new byte[1024];
+    private final byte[] copyBuffer = new byte[512];
     private long lengthWritten = 0;
     private ByteBuffer current;
     
+    /**
+     * Creates an OffHeapWritable that can be up to blockSize*(maxSize/blockSize) bytes.
+     * @param blockSize The number of bytes allocated when more memory is needed to
+     * store data; making this sufficiently large will improve performance in data
+     * access, but this class will always use at least that much memory, so making it
+     * too large will waste RAM
+     * @param maxSize  The maximum amount of RAM to use for storing data (the serialized
+     * format may be slightly larger due to header information)
+     */
     public OffHeapWritable(int blockSize, long maxSize) {
         maxNumBlocks = (int) (maxSize / blockSize);
         current = ByteBuffer.allocateDirect(blockSize);
@@ -97,6 +109,11 @@ public class OffHeapWritable extends OutputStream implements Writable  {
         }
     }
     
+    /**
+     * Returns an input stream reflecting the contents of this OffheapWritable;
+     * NOTE: changes to the contents of this may be reflected in the InputStream
+     * @return an InputStream on the contents of this buffer
+     */
     public InputStream asInputStream() {        
         return new OffheapInputStream();
     }
@@ -143,6 +160,15 @@ public class OffHeapWritable extends OutputStream implements Writable  {
         buffers.add(current);
     }
 
+    /**
+     * Standard write method from OutputStream; this acts like a ByteArrayOutputStream
+     * that stores its bytes off JVM heap, with the difference that this _may_ throw
+     * exceptions
+     * @param b
+     * @param off
+     * @param len
+     * @throws IOException 
+     */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         if(off < 0 || len < 0 || off >= b.length) {
@@ -217,7 +243,7 @@ public class OffHeapWritable extends OutputStream implements Writable  {
 
         @Override
         public int read(byte[] b) throws IOException {
-            return read(b, 0, b.length); //To change body of generated methods, choose Tools | Templates.
+            return read(b, 0, b.length); 
         }
     }
 }
