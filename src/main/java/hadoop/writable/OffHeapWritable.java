@@ -9,6 +9,7 @@ package hadoop.writable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -38,10 +39,8 @@ public class OffHeapWritable extends OutputStream implements Writable  {
     
     @Override
     public void write(DataOutput d) throws IOException {
-        d.writeInt(VERSION);
-        System.out.println("version: " + VERSION);
-        d.writeLong(lengthWritten);
-        System.out.println("length: " + lengthWritten);
+        WritableHeader header = new WritableHeader(VERSION, lengthWritten);
+        header.writeHeader(d);        
         current.flip();
         for(int i = 0; i < buffers.size(); ++i) {
             ByteBuffer readFrom = buffers.get(i);
@@ -86,6 +85,10 @@ public class OffHeapWritable extends OutputStream implements Writable  {
         for(int i = 0; i < buffers.size(); ++i) {
             buffers.get(i).clear();            
         }
+    }
+    
+    public InputStream asInputStream() {        
+        return new OffheapInputStream();
     }
     
     protected void readVersion1Data(DataInput input) throws IOException {
@@ -154,5 +157,57 @@ public class OffHeapWritable extends OutputStream implements Writable  {
     @Override
     public void write(byte[] b) throws IOException {
         write(b, 0, b.length);
+    }
+    
+    protected class OffheapInputStream extends InputStream {
+
+        protected List<ByteBuffer> bufferClones = new ArrayList<>(buffers.size());
+        protected ByteBuffer current = null;
+        
+        public OffheapInputStream() {
+            for(int i = 0; i < buffers.size(); ++i) {
+                final ByteBuffer duplicate = buffers.get(i).duplicate();
+                if(duplicate.position() > 0) {
+                    duplicate.flip();
+                }
+                bufferClones.add(duplicate);
+            }
+            current = bufferClones.get(0);
+        }
+        
+        @Override
+        public int read() throws IOException {
+            int retVal = -1;
+            while(current == null || current.remaining() == 0) {
+                if(bufferClones.isEmpty()) {
+                    return -1;
+                }
+                current = bufferClones.remove(0);
+            }
+            retVal = current.get();
+            return retVal;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            int numRead = 0;
+            while(numRead < len) {
+                if(current == null || current.remaining() == 0) {
+                    if(bufferClones.isEmpty()) {
+                        return numRead > 0 ? numRead : -1;
+                    }
+                    current = bufferClones.remove(0);
+                }
+                int toRead = Math.min(len - numRead, current.remaining());
+                current.get(b, off+numRead, toRead);
+                numRead += toRead;
+            }
+            return numRead;
+        }
+
+        @Override
+        public int read(byte[] b) throws IOException {
+            return read(b, 0, b.length); //To change body of generated methods, choose Tools | Templates.
+        }
     }
 }

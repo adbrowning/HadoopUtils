@@ -13,6 +13,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -136,6 +137,42 @@ public class OffHeapWritableTest {
             expected[i+12] = 3;
         }
         assertArrayEquals("Expected: " + Arrays.toString(Arrays.copyOfRange(expected, 0, 14)) + "\nActual: " + Arrays.toString(Arrays.copyOfRange(generated,0, 14)), expected, generated);
+    }
+    
+    @Test
+    public void testInputStreamHalfPage() throws Exception {
+        for(int i = 0; i < 5; ++i) {
+            writable.write(i);
+        }
+        InputStream in = writable.asInputStream();
+        for(int i = 0; i < 5; ++i) {
+            assertEquals(i, in.read());
+        }
+        assertEquals(-1, in.read());
+    }
+    
+    @Test
+    public void testInputStreamExactPage() throws Exception {
+        for(int i = 0; i < 10; ++i) {
+            writable.write(i);
+        }
+        InputStream in = writable.asInputStream();
+        for(int i = 0; i < 10; ++i) {
+            assertEquals(i, in.read());
+        }
+        assertEquals(-1, in.read());
+    }
+    
+    @Test
+    public void testInputStreamPagePlusOne() throws Exception {
+        for(int i = 0; i < 11; ++i) {
+            writable.write(i);
+        }
+        InputStream in = writable.asInputStream();
+        for(int i = 0; i < 11; ++i) {
+            assertEquals(i, in.read());
+        }
+        assertEquals(-1, in.read());
     }
     
     private byte[] generateExpectedBytes(int fillWith, int count) {
